@@ -127,12 +127,21 @@ describe Ably::Modules::EventEmitter do
     end
   end
 
-  context '#on' do
-    it 'calls the block every time an event is emitted only' do
+  context '#on (RTE3)' do
+    it 'calls the block every time the provided event arg is emitted only' do
       block_called = 0
       subject.on('event') { block_called += 1 }
+      3.times { subject.emit 'otherEvent', 'data' }
       3.times { subject.emit 'event', 'data' }
       expect(block_called).to eql(3)
+    end
+
+    it 'calls the block every time any event is emitted when no event arg is provided' do
+      block_called = 0
+      subject.on { block_called += 1 }
+      3.times { subject.emit 'otherEvent', 'data' }
+      3.times { subject.emit 'event', 'data' }
+      expect(block_called).to eql(6)
     end
 
     it 'catches exceptions in the provided block, logs the error and continues' do
@@ -156,10 +165,19 @@ describe Ably::Modules::EventEmitter do
     end
   end
 
-  context '#once' do
-    it 'calls the block the first time an event is emitted only' do
+  context '#once (RTE4)' do
+    it 'calls the block the first time the event arg is emitted only' do
       block_called = 0
       subject.once('event') { block_called += 1 }
+      3.times { subject.emit 'otherEvent', 'data' }
+      3.times { subject.emit 'event', 'data' }
+      expect(block_called).to eql(1)
+    end
+
+    it 'calls the block the first time any event is emitted when no event arg is provided' do
+      block_called = 0
+      subject.once { block_called += 1 }
+      3.times { subject.emit 'otherEvent', 'data' }
       3.times { subject.emit 'event', 'data' }
       expect(block_called).to eql(1)
     end
@@ -196,40 +214,81 @@ describe Ably::Modules::EventEmitter do
   context '#off' do
     let(:callback) { Proc.new { |msg| obj.received_message msg } }
 
-    before do
-      subject.on(:message, &callback)
+    context 'when on callback is configured for a specific event' do
+      before do
+        subject.on(:message, &callback)
+      end
+
+      after do
+        subject.emit :message, msg
+      end
+
+      context 'with event names as arguments' do
+        it 'deletes matching callbacks when a block is provided' do
+          expect(obj).to_not receive(:received_message).with(msg)
+          subject.off(:message, &callback)
+        end
+
+        it 'deletes all matching callbacks when a block is not provided' do
+          expect(obj).to_not receive(:received_message).with(msg)
+          subject.off(:message)
+        end
+
+        it 'continues if the block does not exist' do
+          expect(obj).to receive(:received_message).with(msg)
+          subject.off(:message) { true }
+        end
+      end
+
+      context 'without any event names' do
+        it 'deletes all matching callbacks' do
+          expect(obj).to_not receive(:received_message).with(msg)
+          subject.off(&callback)
+        end
+
+        it 'deletes all callbacks if not block given' do
+          expect(obj).to_not receive(:received_message).with(msg)
+          subject.off
+        end
+      end
     end
 
-    after do
-      subject.emit :message, msg
-    end
-
-    context 'with event names as arguments' do
-      it 'deletes matching callbacks' do
-        expect(obj).to_not receive(:received_message).with(msg)
-        subject.off(:message, &callback)
+    context 'when on callback is configured for all events' do
+      before do
+        subject.on(&callback)
       end
 
-      it 'deletes all callbacks if not block given' do
-        expect(obj).to_not receive(:received_message).with(msg)
-        subject.off(:message)
+      after do
+        subject.emit :message, msg
       end
 
-      it 'continues if the block does not exist' do
-        expect(obj).to receive(:received_message).with(msg)
-        subject.off(:message) { true }
-      end
-    end
+      context 'with event names as arguments' do
+        it 'does not remove the all events callback when a block is provided' do
+          expect(obj).to receive(:received_message).with(msg)
+          subject.off(:message, &callback)
+        end
 
-    context 'without any event names' do
-      it 'deletes all matching callbacks' do
-        expect(obj).to_not receive(:received_message).with(msg)
-        subject.off(&callback)
+        it 'does not remove the all events callback when a block is not provided' do
+          expect(obj).to receive(:received_message).with(msg)
+          subject.off(:message)
+        end
+
+        it 'does not remove the all events callback when the block does not match' do
+          expect(obj).to receive(:received_message).with(msg)
+          subject.off(:message) { true }
+        end
       end
 
-      it 'deletes all callbacks if not block given' do
-        expect(obj).to_not receive(:received_message).with(msg)
-        subject.off
+      context 'without any event names' do
+        it 'deletes all matching callbacks' do
+          expect(obj).to_not receive(:received_message).with(msg)
+          subject.off(&callback)
+        end
+
+        it 'deletes all callbacks if not block given' do
+          expect(obj).to_not receive(:received_message).with(msg)
+          subject.off
+        end
       end
     end
   end

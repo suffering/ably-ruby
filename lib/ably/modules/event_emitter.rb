@@ -50,18 +50,14 @@ module Ably
       #
       # @return [void]
       def on(*event_names, &block)
-        event_names.each do |event_name|
-          callbacks[callbacks_event_coerced(event_name)] << proc_for_block(block)
-        end
+        add_on_callback_proc *event_names, proc_for_block(block)
       end
 
       # Equivalent of {#on} but any exception raised in a block will bubble up and cause this client library to fail.
       # This method should only be used internally by the client library.
       # @api private
       def unsafe_on(*event_names, &block)
-        event_names.each do |event_name|
-          callbacks[callbacks_event_coerced(event_name)] << proc_for_block(block, unsafe: true)
-        end
+        add_on_callback_proc *event_names, proc_for_block(block, unsafe: true)
       end
 
       # On receiving an event maching the event_name, call the provided block only once and remove the registered callback
@@ -70,32 +66,30 @@ module Ably
       #
       # @return [void]
       def once(*event_names, &block)
-        event_names.each do |event_name|
-          callbacks[callbacks_event_coerced(event_name)] << proc_for_block(block, delete_once_run: true)
-        end
+        add_on_callback_proc *event_names, proc_for_block(block, delete_once_run: true)
       end
 
       # Equivalent of {#once} but any exception raised in a block will bubble up and cause this client library to fail.
       # This method should only be used internally by the client library.
       # @api private
       def unsafe_once(*event_names, &block)
-        event_names.each do |event_name|
-          callbacks[callbacks_event_coerced(event_name)] << proc_for_block(block, delete_once_run: true, unsafe: true)
-        end
+        add_on_callback_proc *event_names, proc_for_block(block, delete_once_run: true, unsafe: true)
       end
 
       # Emit an event with event_name that will in turn call all matching callbacks setup with `on`
       def emit(event_name, *args)
         callbacks[callbacks_event_coerced(event_name)].
           clone.
+          concat(callbacks[nil]). # add in callbacks for any event
           select do |proc_hash|
             if proc_hash[:unsafe]
               proc_hash[:emit_proc].call(*args)
             else
               safe_yield proc_hash[:emit_proc], *args
             end
-          end.each do |callback|
+          end.each do |callback| # proc yields true if set up for once only use
             callbacks[callbacks_event_coerced(event_name)].delete callback
+            callbacks[nil].delete callback
           end
       end
 
@@ -114,6 +108,10 @@ module Ably
           event_names
         end
 
+        if event_names.empty? && block_given?
+          callbacks[nil].delete_if { |proc_hash| proc_hash[:block] == block }
+        end
+
         keys.each do |event_name|
           if block_given?
             callbacks[callbacks_event_coerced(event_name)].delete_if { |proc_hash| proc_hash[:block] == block }
@@ -126,6 +124,16 @@ module Ably
       private
       def self.included(klass)
         klass.extend ClassMethods
+      end
+
+      def add_on_callback_proc(*event_names, proc)
+        if event_names.empty?
+          callbacks[nil] << proc
+        else
+          event_names.each do |event_name|
+            callbacks[callbacks_event_coerced(event_name)] << proc
+          end
+        end
       end
 
       # Create a Hash with a proc that calls the provided block and returns true if option :delete_once_run is set to true.
