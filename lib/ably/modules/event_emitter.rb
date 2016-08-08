@@ -102,21 +102,21 @@ module Ably
       #
       # @return [void]
       def off(*event_names, &block)
-        keys = if event_names.empty?
-          callbacks.keys
-        else
-          event_names
-        end
-
-        if event_names.empty? && block_given?
-          callbacks[nil].delete_if { |proc_hash| proc_hash[:block] == block }
-        end
-
-        keys.each do |event_name|
+        if event_names.empty?
           if block_given?
-            callbacks[callbacks_event_coerced(event_name)].delete_if { |proc_hash| proc_hash[:block] == block }
+            callbacks.each do |event_name, registered_callbacks|
+              registered_callbacks.delete_if { |proc_hash| proc_hash[:block] == block }
+            end
           else
-            callbacks[callbacks_event_coerced(event_name)].clear
+            callbacks.clear
+          end
+        else
+          event_names.each do |event_name|
+            if block_given?
+              callbacks[callbacks_event_coerced(event_name)].delete_if { |proc_hash| proc_hash[:block] == block }
+            else
+              callbacks[callbacks_event_coerced(event_name)].clear
+            end
           end
         end
       end
