@@ -21,7 +21,7 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency 'eventmachine', '~> 1.0'
   spec.add_runtime_dependency 'em-http-request', '~> 1.1'
   spec.add_runtime_dependency 'statesman', '~> 1.0.0'
-  spec.add_runtime_dependency 'faraday', '~> 0.9'
+  spec.add_runtime_dependency 'faraday', '~> 0.8'
   if RUBY_VERSION.match(/^1/)
     spec.add_runtime_dependency 'json', '< 2.0'
   else
